@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>长视频问题浏览器</title>
+<meta name="description" content="Self-Forcing、LongLive 及其变体生成的 60 秒视频，配 VLM 盲评标注的时间轴浏览器。">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1; --surface: #fcfcfb; --surface2: #f0efec; --ink: #0b0b0b; --ink2: #52514e; --muted: #7a7974;
+  --rule: #e2e1dc; --rule2: #ecebe7; --focus: #2a78d6;
+  --m1: #2a78d6; --m2: #eb6834; --m3: #1baf7a; --m4: #eda100; --m5: #e87ba4; --m6: #008300; --m7: #6250d6;
+  --red: #d03b3b; --blue: #2a78d6; --orange: #eb6834; --violet: #6250d6; --gray: #9b9a93; --green: #0ca30c;
+  --f-body: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --f-data: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface2: #232321; --ink: #f0efec; --ink2: #c3c2b7; --muted: #8f8e86;
+  --rule: #2f2f2c; --rule2: #262624; --focus: #3987e5;
+  --m1: #3987e5; --m2: #d95926; --m3: #199e70; --m4: #c98500; --m5: #d55181; --m6: #008300; --m7: #9085e9;
+  --red: #e05252; --blue: #3987e5; --orange: #d95926; --violet: #9085e9; --gray: #77766f; --green: #0ca30c; } }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface2: #232321; --ink: #f0efec; --ink2: #c3c2b7; --muted: #8f8e86;
+  --rule: #2f2f2c; --rule2: #262624; --focus: #3987e5;
+  --m1: #3987e5; --m2: #d95926; --m3: #199e70; --m4: #c98500; --m5: #d55181; --m6: #008300; --m7: #9085e9;
+  --red: #e05252; --blue: #3987e5; --orange: #d95926; --violet: #9085e9; --gray: #77766f; --green: #0ca30c; }
+* { box-sizing: border-box }
+html { -webkit-text-size-adjust: 100% }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 var(--f-body) }
+a { color: var(--focus) }
+button, select, input { font: inherit; color: inherit }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 0 16px 64px }
+.mono, .num { font-family: var(--f-data); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) } .ink2 { color: var(--ink2) }
+header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule) }
+header.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; padding-bottom: 10px; flex-wrap: wrap }
+@media (max-width: 600px) { header.top { position: static } }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .01em }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap }
+nav.tabs a { text-decoration: none; color: var(--ink2); padding: 5px 11px; border-radius: 7px; font-weight: 500 }
+nav.tabs a:hover { background: var(--surface2) }
+nav.tabs a.on { background: var(--ink); color: var(--bg) }
+.spacer { flex: 1 }
+.btn { background: var(--surface); border: 1px solid var(--rule); border-radius: 7px; padding: 4px 10px; cursor: pointer; white-space: nowrap }
+.btn:hover { border-color: var(--muted) }
+.btn:focus-visible, select:focus-visible, input:focus-visible, .card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 14px 0 10px }
+.filters label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink2) }
+select, input[type=search] { background: var(--surface); border: 1px solid var(--rule); border-radius: 7px; padding: 4px 8px; max-width: 100% }
+input[type=search] { width: 220px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 2px 10px 2px 8px; cursor: pointer; user-select: none; color: var(--ink2) }
+.chip.off { opacity: .45 }
+.chip .sw, .mchip .sw { width: 10px; height: 10px; border-radius: 3px; flex: none }
+.mchip { display: inline-flex; align-items: center; gap: 6px; font-weight: 600 }
+.count { color: var(--muted); margin-left: auto }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--ink2); font-size: 12.5px; padding: 4px 0 12px; align-items: center }
+.legend .k { display: inline-flex; align-items: center; gap: 6px }
+.legend .bar { width: 18px; height: 8px; border-radius: 2px; display: inline-block }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px; cursor: pointer; display: grid; gap: 7px; align-content: start; min-width: 0 }
+.card:hover { border-color: var(--muted) }
+.card .hd { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; min-width: 0 }
+.card .hd .meta { color: var(--muted); margin-left: auto; white-space: nowrap }
+.strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; border-radius: 6px; overflow: hidden }
+.strip .fr { aspect-ratio: 96 / 55; background-repeat: no-repeat; background-color: var(--surface2); position: relative }
+.strip .fr span { position: absolute; left: 3px; bottom: 1px; font: 10px var(--f-data); color: #fff; text-shadow: 0 0 3px #000 }
+.prompt2 { font-size: 12.5px; color: var(--ink2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.badges { display: flex; flex-wrap: wrap; gap: 4px }
+.bd { font-size: 11.5px; border-radius: 4px; padding: 0 6px; border: 1px solid var(--rule); color: var(--ink2); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px }
+.bd i { width: 7px; height: 7px; border-radius: 2px; display: inline-block }
+.more { display: flex; justify-content: center; padding: 18px }
+svg.tl { display: block; width: 100%; overflow: visible }
+svg.tl text { font-family: var(--f-body); fill: var(--ink2) }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); max-width: 330px; font-size: 12.5px; display: none }
+.tip .thumb { width: 192px; height: 110px; background-repeat: no-repeat; border-radius: 4px; margin-bottom: 6px; background-color: var(--surface2) }
+.tip .t { font: 600 13px var(--f-data) }
+.tip ul { margin: 4px 0 0; padding-left: 16px }
+.tip li { margin: 2px 0 }
+section.view { display: none } section.view.on { display: block }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px }
+.detail-top { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px; padding-top: 14px }
+@media (max-width: 900px) { .detail-top { grid-template-columns: 1fr } }
+video { width: 100%; border-radius: 8px; background: #000; display: block; aspect-ratio: 416 / 240 }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px }
+.kv dt { color: var(--muted) } .kv dd { margin: 0 }
+h2 { font-size: 16px; margin: 22px 0 10px } h3 { font-size: 14px; margin: 0 0 6px }
+.navrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-top: 14px }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--rule2); vertical-align: top }
+th { color: var(--muted); font-weight: 500; white-space: nowrap }
+td.num, th.num { text-align: right }
+.tablewrap { overflow-x: auto }
+.st { font-size: 12px; border-radius: 4px; padding: 0 5px; white-space: nowrap; border: 1px solid var(--rule) }
+.st.same { color: var(--muted) }
+.st.altered, .st.replaced, .st.vanished { color: #fff; background: var(--red); border-color: var(--red) }
+.st.altered { background: color-mix(in srgb, var(--red) 70%, var(--surface)) }
+.st.exited, .st.hidden { color: var(--ink2); background: var(--surface2) }
+.res { font-size: 12px; border-radius: 4px; padding: 0 6px; white-space: nowrap }
+.res.win { background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--ink) }
+.res.lose { background: color-mix(in srgb, var(--red) 22%, transparent); color: var(--ink) }
+.res.same, .res.both_bad { background: var(--surface2); color: var(--ink2) }
+.ev { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--rule2) }
+.ev:last-child { border-bottom: 0 }
+.ev .sev { font: 600 11px var(--f-data); border-radius: 4px; padding: 1px 6px; color: #fff; height: fit-content }
+.ev .eh { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline }
+.note { color: var(--ink2); font-size: 13px }
+.cmpgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; padding-top: 12px }
+@media (max-width: 480px) { .cmpgrid { grid-template-columns: 1fr } input[type=search] { width: 100% } }
+.cmpcard { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px; display: grid; gap: 8px; min-width: 0 }
+.cmpcard .hd { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.prose { max-width: 78ch; color: var(--ink2) } .prose p { margin: 0 0 10px } .prose strong { color: var(--ink) }
+.chart { position: relative }
+.chart svg text { font-family: var(--f-body); fill: var(--muted); font-size: 11px }
+.chart svg text.lab { fill: var(--ink2); font-size: 12px }
+.hint { font-size: 12.5px; color: var(--muted) }
+.empty { padding: 40px; text-align: center; color: var(--muted) }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <h1>长视频问题浏览器</h1>
+  <nav class="tabs" aria-label="视图">
+    <a href="#browse" data-v="browse">浏览</a>
+    <a href="#cmp" data-v="cmp">同一 prompt 对比</a>
+    <a href="#sum" data-v="sum">方法汇总</a>
+    <a href="#about" data-v="about">说明</a>
+  </nav>
+  <span class="spacer"></span>
+  <button class="btn" id="theme" title="切换明暗">明暗：自动</button>
+</div></header>
+
+<div class="wrap">
+  <section class="view" id="view-browse">
+    <div class="filters" id="filters"></div>
+    <div class="legend" id="legend1"></div>
+    <div class="grid" id="grid"></div>
+    <div class="more"><button class="btn" id="moreBtn">加载更多</button></div>
+  </section>
+  <section class="view" id="view-detail"></section>
+  <section class="view" id="view-cmp"></section>
+  <section class="view" id="view-sum"></section>
+  <section class="view" id="view-about"></section>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<!-- shared SVG defs; must stay rendered (not display:none) for url(#hatch) to resolve -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="5" fill="var(--violet)"/></pattern>
+</defs></svg>
+
+<script>
+"use strict";
+// ---------- vocab ----------
+const ARMS = ["R", "AB10", "ABs10", "ll_orig", "ll_opsdv", "sf_orig", "sf_opsdv"];
+const M = {
+  R:        { s: "LL·R",              n: "LongLive-1.3B · R（我们的推理代码，普通读取）", c: "var(--m1)" },
+  AB10:     { s: "LL·AB10",           n: "LongLive-1.3B · AB10（对齐 sink 偏置，主体位置来自 SAM 2）", c: "var(--m2)" },
+  ABs10:    { s: "LL·ABs10",          n: "LongLive-1.3B · ABs10（AB10 的无外部模型版本）", c: "var(--m3)" },
+  ll_orig:  { s: "LongLive",          n: "LongLive-1.3B 官方权重 · OPSD-V 仓库推理", c: "var(--m4)" },
+  ll_opsdv: { s: "LongLive+OPSD-V",   n: "LongLive-1.3B + OPSD-V LoRA", c: "var(--m5)" },
+  sf_orig:  { s: "Self-Forcing",      n: "Self-Forcing（DMD，5 s 训练，推到 60 s）", c: "var(--m6)" },
+  sf_opsdv: { s: "Self-Forcing+OPSD-V", n: "Self-Forcing + OPSD-V LoRA", c: "var(--m7)" },
+};
+const DS = {
+  mg128_2seeds_60s:    { s: "MG128", n: "MovieGen 前 128 条 prompt × 2 个种子（LL·R / AB10 / ABs10）" },
+  mgx100_seed5000_60s: { s: "MGX100", n: "MovieGen 抽 100 条 prompt，seed 5000+（Self-Forcing / LongLive ± OPSD-V）" },
+};
+const TN = { identity_drift: "身份漂移", attribute_drift: "属性漂移", object_permanence: "物体凭空出现/消失/重复",
+  scene_drift: "场景漂移", scene_cut: "突然切镜", quality_degradation: "画质退化", structure_artifact: "结构畸变",
+  loop_repetition: "循环 / 原地踏步", motion_stall: "运动停滞", prompt_drift: "偏离提示词", other: "其他" };
+const FAM = { identity_drift: "subj", attribute_drift: "subj", object_permanence: "subj", scene_drift: "scene", scene_cut: "scene",
+  quality_degradation: "qual", structure_artifact: "qual", loop_repetition: "motion", motion_stall: "motion", prompt_drift: "other", other: "other" };
+const FN = { subj: "主体（身份 / 属性 / 物体恒存）", scene: "场景 / 背景", qual: "画质 / 结构", motion: "运动（循环 / 停滞）", other: "偏离提示词 / 其他" };
+const FC = { subj: "var(--red)", scene: "var(--blue)", qual: "var(--orange)", motion: "var(--violet)", other: "var(--gray)" };
+const KIND = { altered: "被改变", replaced: "被替换", vanished: "消失", none: "无" };
+const ST = { same: "不变", altered: "改变", replaced: "被替换", vanished: "消失", exited: "出画", hidden: "被遮挡" };
+const FROZ = { none: "无", partial: "部分冻结", mostly: "大部分冻结" };
+const DEG = { stable: "稳定", gradual: "逐渐衰退", collapse: "崩坏" };
+const ART = { none: "无", minor: "轻微", major: "严重" };
+const CMP = { r_ab10: "LL·R 对 LL·AB10", abs_ab10: "LL·AB10 对 LL·ABs10", ll_opsdv: "LongLive 对 LongLive+OPSD-V", sf_opsdv: "Self-Forcing 对 Self-Forcing+OPSD-V" };
+const Q = { identity: "身份", motion: "运动", quality: "画质", prompt: "提示词", overall: "总体" };
+const RES = { win: "胜", lose: "负", same: "相同", both_bad: "都差" };
+const VBN = { subject_consistency: "主体一致", background_consistency: "背景一致", motion_smoothness: "运动平滑", dynamic_degree: "动态程度", imaging_quality: "成像质量" };
+
+// ---------- dom helpers (all label text goes through textContent) ----------
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "text") e.textContent = v; else if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (k === "style") e.style.cssText = v; else e.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return e;
+}
+function sv(tag, attrs, ...kids) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) e.setAttribute(k, v);
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return e;
+}
+const $ = s => document.querySelector(s);
+const isNum = x => typeof x === "number" && isFinite(x);
+const pct = x => (100 * x).toFixed(0) + "%";
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
+const median = a => { if (!a.length) return NaN; const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
+const mchip = arm => el("span", { class: "mchip" }, el("span", { class: "sw", style: `background:${M[arm].c}` }), M[arm].s);
+const SW = 96, SH = 55;
+function frameBg(node, id, s, scale = 1) {
+  node.style.backgroundImage = `url(s/${id}.webp)`;
+  node.style.backgroundSize = `${61 * 100}% 100%`;
+  node.style.backgroundPosition = `${(s / 60) * 100}% 0`;
+}
+
+// ---------- data ----------
+let D = [], BYID = {}, GROUPS = [], GROUP_OF = {};
+function derive(v) {
+  v.dT = v.whole.map(w => isNum(w.drift_t) ? w.drift_t : null);
+  const any = f => v.whole.some(f), both = f => v.whole.length > 0 && v.whole.every(f);
+  const F = {
+    drift: w => isNum(w.drift_t), degrade: w => w.degrade !== "stable", collapse: w => w.degrade === "collapse",
+    frozen: w => w.frozen !== "none", loop: w => w.loop === "yes", major: w => w.artifact === "major",
+  };
+  v.any = {}; v.both = {};
+  for (const [k, f] of Object.entries(F)) { v.any[k] = any(f); v.both[k] = both(f); }
+  const pd = [1, 2].map(p => v.probe.filter(x => x.pass_ === p).some(x => x.main_drift));
+  v.any.probe = pd[0] || pd[1]; v.both.probe = v.probe.length > 0 && pd[0] && pd[1];
+  const ev = v.events ? v.events.events : [];
+  v.any.s3 = v.both.s3 = ev.some(e => e.sev === 3);
+  v.any.subj = v.both.subj = ev.some(e => FAM[e.type] === "subj" && e.sev >= 2);
+  v.any.clean = !v.any.drift && !v.any.degrade && !v.any.frozen; v.both.clean = !v.both.drift && !v.both.degrade && !v.both.frozen;
+  const ts = v.dT.filter(isNum); v.driftMin = ts.length ? Math.min(...ts) : 99;
+  v.sevSum = ev.reduce((s, e) => s + (e.sev || 0) ** 2, 0);
+  v.unit = v.dataset === "mg128_2seeds_60s" ? `#${v.line} · seed ${v.seed}` : `#${v.pos} · seed ${v.seed}`;
+}
+function buildGroups() {
+  const m = new Map();
+  for (const v of D) { if (!m.has(v.prompt)) m.set(v.prompt, []); m.get(v.prompt).push(v); }
+  GROUPS = [...m.entries()].map(([p, vs]) => ({ prompt: p, vs: vs.sort((a, b) => a.dataset.localeCompare(b.dataset) || a.seed - b.seed || ARMS.indexOf(a.arm) - ARMS.indexOf(b.arm)) }));
+  GROUPS.sort((a, b) => a.vs[0].dataset.localeCompare(b.vs[0].dataset) || (a.vs[0].line ?? a.vs[0].pos) - (b.vs[0].line ?? b.vs[0].pos));
+  GROUPS.forEach((g, i) => g.vs.forEach(v => GROUP_OF[v.id] = i));
+}
+
+// ---------- tooltip ----------
+const tip = $("#tip");
+function showTip(evt, build) {
+  tip.replaceChildren(...build());
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  let x = evt.clientX + 14, y = evt.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - 14;
+  tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+// ---------- timeline ----------
+function packRows(evs) {
+  const rows = [];
+  for (const e of [...evs].sort((a, b) => a.t0 - b.t0)) {
+    const t1 = e.t1 ?? 60;
+    let r = rows.findIndex(end => end <= e.t0 - 0.5);
+    if (r < 0) { r = rows.length; rows.push(0); }
+    rows[r] = Math.max(t1, e.t0 + 1); e._row = r;
+  }
+  return Math.max(1, rows.length);
+}
+function activeAt(v, t) {
+  const out = [];
+  if (v.events) for (const e of v.events.events) if (e.t0 <= t + 0.5 && t <= (e.t1 ?? 60) + 0.5)
+    out.push({ c: FC[FAM[e.type] || "other"], txt: `逐事件 · ${TN[e.type] || e.type} · S${e.sev}${e.entity_zh || e.entity ? " · " + (e.entity_zh || e.entity) : ""}` });
+  v.whole.forEach(w => {
+    if (isNum(w.drift_t) && t >= w.drift_t) out.push({ c: "var(--red)", txt: `整段第${w.pass_}轮 · 主体${KIND[w.drift_kind] || "漂移"}（自 ${w.drift_t} s）` });
+    if (w.degrade !== "stable" && isNum(w.degrade_t) && t >= w.degrade_t) out.push({ c: "var(--orange)", txt: `整段第${w.pass_}轮 · 画质${DEG[w.degrade]}（自 ${w.degrade_t} s）` });
+  });
+  for (const p of v.probe) if (Math.abs(p.t - t) <= 1.5) {
+    const main = p.entities.filter(e => e.role === "main").map(e => `${ST[e.end] || e.end}`).join("、");
+    out.push({ c: p.main_drift ? "var(--red)" : "var(--green)", txt: `探针第${p.pass_}轮 @${p.t} s · 主体${p.main_drift ? "漂移" : "未漂移"}${main ? "（" + main + "）" : ""}` });
+  }
+  return out;
+}
+/* opt: { full, width, onSeek(t), strip } ; returns {node, setHead(t)} */
+function timeline(v, opt) {
+  const full = !!opt.full, W = opt.width || 300;
+  const narrow = W < 520, LW = full ? (narrow ? 44 : 84) : 0, RP = full ? 6 : 0, PW = W - LW - RP;
+  const x = t => LW + Math.max(0, Math.min(60, t)) / 60 * PW;
+  const g = sv("g"), lanes = [];
+  let y = full ? 16 : 0;
+  const evs = v.events ? v.events.events.map(e => ({ ...e })) : null;
+  // lane: events
+  if (evs) {
+    const rows = full ? packRows(evs) : 1, rh = full ? 12 : 8, gap = full ? 2 : 0, h = rows * rh + (rows - 1) * gap;
+    lanes.push({ y, h, label: narrow ? "事件" : "逐事件" });
+    g.append(sv("rect", { x: LW, y, width: PW, height: h, rx: 2, fill: "var(--surface2)" }));
+    for (const e of evs.sort((a, b) => (a.sev || 0) - (b.sev || 0))) {
+      const r = full ? e._row : 0, x0 = x(e.t0), x1 = x(Math.max(e.t1 ?? 60, e.t0 + 1));
+      g.append(sv("rect", { x: x0, y: y + r * (rh + gap), width: Math.max(3, x1 - x0), height: rh, rx: 2,
+        fill: FC[FAM[e.type] || "other"], "fill-opacity": [0, .4, .72, 1][e.sev || 1], stroke: e.sev === 3 ? "var(--ink)" : null, "stroke-width": e.sev === 3 ? 1 : null }));
+    }
+    y += h + (full ? 8 : 3);
+  } else if (full) {
+    lanes.push({ y, h: 12, label: narrow ? "事件" : "逐事件" });
+    g.append(sv("text", { x: LW + 4, y: y + 10, "font-size": 11, fill: "var(--muted)" }, "（此视频没有逐事件标注）"));
+    y += 20;
+  }
+  // lanes: whole-video passes
+  for (const w of v.whole) {
+    const h = full ? 18 : 8, half = h / 2;
+    lanes.push({ y, h, label: narrow ? `整段${"①②"[w.pass_ - 1]}` : `整段 第${w.pass_}轮` });
+    g.append(sv("rect", { x: LW, y, width: PW, height: h, rx: 2, fill: "var(--surface2)" }));
+    if (w.frozen !== "none") g.append(sv("rect", { x: LW, y, width: PW, height: h, rx: 2, fill: "url(#hatch)", opacity: w.frozen === "mostly" ? .55 : .3 }));
+    if (isNum(w.drift_t)) g.append(sv("rect", { x: x(w.drift_t), y, width: Math.max(3, x(60) - x(w.drift_t)), height: half - (full ? 1 : 0), rx: 2, fill: "var(--red)", "fill-opacity": w.drift_kind === "altered" ? .75 : 1 }));
+    if (w.degrade !== "stable") {
+      const t0 = isNum(w.degrade_t) ? w.degrade_t : 0;
+      g.append(sv("rect", { x: x(t0), y: y + half, width: Math.max(3, x(60) - x(t0)), height: half, rx: 2, fill: "var(--orange)", "fill-opacity": w.degrade === "collapse" ? 1 : .6 }));
+    }
+    if (full && isNum(w.drift_t)) g.append(sv("text", { x: Math.min(x(w.drift_t) + 3, LW + PW - 60), y: y + half - 1.5, "font-size": 9, fill: "#fff", style: "fill:#fff" }, `${KIND[w.drift_kind] || ""} ${w.drift_t}s`));
+    y += h + (full ? 5 : 3);
+  }
+  // lane: probes
+  if (full) {
+    const h = 20; lanes.push({ y, h, label: narrow ? "探针" : "探针 30/60 s" });
+    g.append(sv("rect", { x: LW, y, width: PW, height: h, rx: 2, fill: "var(--surface2)" }));
+    if (!v.probe.length) g.append(sv("text", { x: LW + 4, y: y + 14, "font-size": 11, fill: "var(--muted)" }, "（开头无明确主体，未做探针）"));
+    for (const p of v.probe) {
+      const cy = y + (p.pass_ === 1 ? 6 : 14);
+      g.append(sv("circle", { cx: x(p.t) - (p.t === 60 ? 5 : 0), cy, r: 4, fill: p.main_drift ? "var(--red)" : "var(--green)", stroke: "var(--surface)", "stroke-width": 1.5 }));
+    }
+    y += h + 6;
+  }
+  // filmstrip
+  let stripH = 0;
+  if (full && opt.strip !== false) {
+    const n = W < 520 ? 7 : 13, fw = PW / n; stripH = fw * SH / SW;
+    lanes.push({ y, h: stripH, label: "画面" });  // n tiles, each the frame at its tile centre
+    for (let i = 0; i < n; i++) {
+      // tile i spans [i, i+1) / n of the axis and shows the frame at its centre second
+      const s = Math.round((i + 0.5) / n * 60), x0 = LW + i * fw;
+      const svgImg = sv("svg", { x: x0, y, width: fw - 1, height: stripH, viewBox: `${s * SW} 0 ${SW} ${SH}`, preserveAspectRatio: "none" },
+        sv("image", { href: `s/${v.id}.webp`, width: SW * 61, height: SH }));
+      g.append(svgImg);
+    }
+    y += stripH + 4;
+  }
+  const H = y + (full ? 2 : 0);
+  const svg = sv("svg", { class: "tl", viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": "时间轴：0 到 60 秒的标注" });
+  // axis
+  if (full) {
+    for (let t = 0; t <= 60; t += 10) {
+      svg.append(sv("line", { x1: x(t), x2: x(t), y1: 12, y2: H - stripH - 4, stroke: "var(--rule)", "stroke-width": 1 }));
+      svg.append(sv("text", { x: x(t), y: 9, "font-size": 10, "text-anchor": t === 0 ? "start" : t === 60 ? "end" : "middle", fill: "var(--muted)", style: "fill:var(--muted)" }, `${t}s`));
+    }
+    for (const l of lanes) svg.append(sv("text", { x: 0, y: l.y + Math.min(l.h, 14) / 2 + 4, "font-size": W < 520 ? 10 : 11.5 }, l.label));
+  } else {
+    svg.append(sv("line", { x1: x(30), x2: x(30), y1: 0, y2: H, stroke: "var(--rule)", "stroke-width": 1 }));
+  }
+  svg.append(g);
+  const head = sv("line", { x1: LW, x2: LW, y1: full ? 12 : 0, y2: H, stroke: "var(--ink)", "stroke-width": 1.5, opacity: 0 });
+  const hov = sv("line", { x1: LW, x2: LW, y1: full ? 12 : 0, y2: H, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "2 2", opacity: 0 });
+  svg.append(hov, head);
+  const hit = sv("rect", { x: LW, y: 0, width: PW, height: H, fill: "transparent", style: `cursor:${opt.onSeek ? "pointer" : "default"}` });
+  const tAt = evt => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(60, ((evt.clientX - r.left) * W / r.width - LW) / PW * 60)); };
+  hit.addEventListener("pointermove", evt => {
+    const t = tAt(evt), s = Math.round(t);
+    hov.setAttribute("x1", x(t)); hov.setAttribute("x2", x(t)); hov.setAttribute("opacity", 1);
+    showTip(evt, () => {
+      const th = el("div", { class: "thumb" }); frameBg(th, v.id, s);
+      const items = activeAt(v, t);
+      return [th, el("div", { class: "t", text: `${t.toFixed(1)} s` }),
+        items.length ? el("ul", {}, items.map(i => el("li", { style: `list-style:none;margin-left:-16px` }, el("span", { class: "bd", style: "border:0;padding:0" }, el("i", { style: `background:${i.c}` })), " ", i.txt)))
+          : el("div", { class: "muted", text: "此时刻没有标注的问题" }),
+        opt.onSeek ? el("div", { class: "hint", text: "点击跳到这一秒" }) : null];
+    });
+  });
+  hit.addEventListener("pointerleave", () => { hov.setAttribute("opacity", 0); hideTip(); });
+  if (opt.onSeek) hit.addEventListener("click", evt => { evt.stopPropagation(); opt.onSeek(tAt(evt)); });
+  svg.append(hit);
+  return { node: svg, setHead(t) { const xx = x(t); head.setAttribute("x1", xx); head.setAttribute("x2", xx); head.setAttribute("opacity", 1); } };
+}
+function legend(node, withProbe) {
+  const k = (c, t, style) => el("span", { class: "k" }, el("span", { class: "bar", style: `background:${c};${style || ""}` }), t);
+  node.replaceChildren(...[
+    el("b", { text: "逐事件：", style: "color:var(--ink)" }),
+    ...Object.keys(FN).map(f => k(FC[f], FN[f])),
+    el("span", { class: "muted", text: "（越不透明越严重；黑框 = 严重度 3）" }),
+    el("b", { text: "整段：", style: "color:var(--ink)" }),
+    k("var(--red)", "上半条：主体漂移（起点 → 结束）"), k("var(--orange)", "下半条：画质衰退"),
+    k("transparent", "斜纹：画面冻结", "background:repeating-linear-gradient(45deg,var(--violet) 0 2px,transparent 2px 5px)"),
+    withProbe ? el("span", { class: "k" }, el("span", { class: "bar", style: "background:var(--red);width:8px;height:8px;border-radius:50%" }), "/",
+      el("span", { class: "bar", style: "background:var(--green);width:8px;height:8px;border-radius:50%" }), "探针：主体漂移 / 未漂移") : null].filter(Boolean));
+}
+
+// ---------- browse ----------
+const S = { ds: "all", arms: new Set(ARMS), issue: "any_", mode: "any", sort: "default", q: "", shown: 0 };
+let LIST = [];
+const ISSUES = [["any_", "全部视频"], ["drift", "主体漂移（整段评审）"], ["probe", "主体漂移（探针 30/60 s）"], ["subj", "逐事件：主体问题 S≥2"],
+  ["s3", "逐事件：有严重度 3"], ["degrade", "画质衰退"], ["collapse", "画质崩坏"], ["frozen", "画面冻结"], ["loop", "循环 / 回弹"],
+  ["major", "严重伪影"], ["clean", "无漂移、无衰退、无冻结"]];
+function buildFilters() {
+  const f = $("#filters");
+  const dsSel = el("select", { "aria-label": "数据集", onchange: e => { S.ds = e.target.value; refresh(); } },
+    el("option", { value: "all", text: "全部数据集" }), ...Object.entries(DS).map(([k, d]) => el("option", { value: k, text: d.s + " · " + d.n })));
+  const chips = el("div", { class: "chips" }, ARMS.map(a => {
+    const c = el("span", { class: "chip", role: "button", tabindex: 0, "aria-pressed": "true", title: M[a].n },
+      el("span", { class: "sw", style: `background:${M[a].c}` }), M[a].s);
+    const tog = () => { S.arms.has(a) ? S.arms.delete(a) : S.arms.add(a); c.classList.toggle("off", !S.arms.has(a)); c.setAttribute("aria-pressed", S.arms.has(a)); refresh(); };
+    c.addEventListener("click", tog); c.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tog(); } });
+    c.addEventListener("dblclick", () => { S.arms = new Set([a]); chips.querySelectorAll(".chip").forEach((x, i) => { x.classList.toggle("off", ARMS[i] !== a); }); refresh(); });
+    return c;
+  }));
+  const issue = el("select", { "aria-label": "问题", onchange: e => { S.issue = e.target.value; refresh(); } }, ISSUES.map(([k, t]) => el("option", { value: k, text: t })));
+  const mode = el("select", { "aria-label": "口径", title: "整段评审跑了两轮独立盲评", onchange: e => { S.mode = e.target.value; refresh(); } },
+    el("option", { value: "any", text: "任一轮标出即算" }), el("option", { value: "both", text: "两轮都标出才算" }));
+  const sort = el("select", { "aria-label": "排序", onchange: e => { S.sort = e.target.value; refresh(); } },
+    [["default", "按 prompt 顺序"], ["early", "漂移起点最早"], ["sev", "逐事件问题最重"], ["iq", "VBench 成像质量最低"], ["shuffle", "随机"]].map(([k, t]) => el("option", { value: k, text: t })));
+  const q = el("input", { type: "search", placeholder: "搜索 prompt / 评审备注", "aria-label": "搜索", oninput: e => { S.q = e.target.value.trim().toLowerCase(); refresh(); } });
+  f.replaceChildren(el("label", {}, "数据集", dsSel), chips, el("label", {}, "问题", issue, mode), el("label", {}, "排序", sort), q, el("span", { class: "count", id: "count" }));
+  f.append(el("div", { class: "hint", style: "flex-basis:100%", text: "方法标签：单击开关，双击只看这一个。卡片上三张图依次是 0 s / 30 s / 60 s；时间轴上悬停可看那一秒的画面。" }));
+}
+let SHUF = null;
+function refresh() {
+  const k = S.issue;
+  LIST = D.filter(v => (S.ds === "all" || v.dataset === S.ds) && S.arms.has(v.arm) && (k === "any_" || v[S.mode][k]) &&
+    (!S.q || v.prompt.toLowerCase().includes(S.q) || v.whole.some(w => (w.note || "").toLowerCase().includes(S.q)) ||
+      (v.events && ((v.events.notes || "") + (v.events.notes_zh || "")).toLowerCase().includes(S.q))));
+  if (S.sort === "early") LIST.sort((a, b) => a.driftMin - b.driftMin);
+  else if (S.sort === "sev") LIST.sort((a, b) => b.sevSum - a.sevSum || a.driftMin - b.driftMin);
+  else if (S.sort === "iq") LIST.sort((a, b) => (a.vbench?.imaging_quality ?? 999) - (b.vbench?.imaging_quality ?? 999));
+  else if (S.sort === "shuffle") { SHUF = SHUF || Object.fromEntries(D.map(v => [v.id, Math.random()])); LIST.sort((a, b) => SHUF[a.id] - SHUF[b.id]); }
+  $("#count").textContent = `显示 ${LIST.length} / ${D.length} 段视频`;
+  $("#grid").replaceChildren(); S.shown = 0; more();
+}
+function badges(v) {
+  const b = [], m = S.mode === "both" ? v.both : v.any;
+  const ts = v.dT.filter(isNum);
+  if (ts.length) b.push(el("span", { class: "bd" }, el("i", { style: "background:var(--red)" }), `主体漂移 ${ts.map(t => t + "s").join(" / ")}`));
+  if (m.collapse) b.push(el("span", { class: "bd" }, el("i", { style: "background:var(--orange)" }), "画质崩坏"));
+  else if (m.degrade) b.push(el("span", { class: "bd" }, el("i", { style: "background:var(--orange);opacity:.6" }), "画质衰退"));
+  if (m.frozen) b.push(el("span", { class: "bd" }, el("i", { style: "background:var(--violet)" }), "冻结"));
+  if (m.loop) b.push(el("span", { class: "bd", text: "循环" }));
+  if (m.major) b.push(el("span", { class: "bd", text: "严重伪影" }));
+  if (v.any.s3) b.push(el("span", { class: "bd", style: "border-color:var(--ink)", text: "S3 事件" }));
+  if (!b.length) b.push(el("span", { class: "bd", style: "color:var(--green)", text: "未标出问题" }));
+  return b;
+}
+function card(v) {
+  const strip = el("div", { class: "strip" }, [0, 30, 60].map(s => { const d = el("div", { class: "fr" }, el("span", { text: s + "s" })); frameBg(d, v.id, s); return d; }));
+  const c = el("article", { class: "card", tabindex: 0, "aria-label": `${M[v.arm].s} ${v.unit}` },
+    el("div", { class: "hd" }, mchip(v.arm), el("span", { class: "meta mono", text: `${DS[v.dataset].s} ${v.unit}` })),
+    strip, timeline(v, { full: false, width: 300 }).node, el("div", { class: "prompt2", text: v.prompt }), el("div", { class: "badges" }, badges(v)));
+  const go = () => { location.hash = "#v/" + v.id; };
+  c.addEventListener("click", go); c.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  return c;
+}
+function more() {
+  const g = $("#grid"), n = Math.min(LIST.length, S.shown + 48);
+  const frag = document.createDocumentFragment();
+  for (let i = S.shown; i < n; i++) frag.append(card(LIST[i]));
+  g.append(frag); S.shown = n;
+  $("#moreBtn").style.display = S.shown < LIST.length ? "" : "none";
+  if (!LIST.length) g.append(el("div", { class: "empty", text: "没有符合条件的视频" }));
+}
+$("#moreBtn").addEventListener("click", more);
+new IntersectionObserver(es => { if (es[0].isIntersecting && $("#view-browse").classList.contains("on") && S.shown < LIST.length) more(); }, { rootMargin: "600px" }).observe($("#moreBtn"));
+
+// ---------- detail ----------
+let CUR = null;
+function stateChip(s) { return el("span", { class: "st " + s, text: ST[s] || s }); }
+function detail(id) {
+  const v = BYID[id], sec = $("#view-detail");
+  if (!v) { sec.replaceChildren(el("div", { class: "empty", text: "找不到这个视频：" + id })); return; }
+  const idx = LIST.findIndex(x => x.id === id), list = idx >= 0 ? LIST : D, i = idx >= 0 ? idx : D.indexOf(v);
+  const prev = list[i - 1], next = list[i + 1];
+  const video = el("video", { src: `v/${v.id}.mp4`, controls: "", preload: "auto", playsinline: "", muted: "" });
+  video.muted = true;
+  const tlBox = el("div", { class: "panel", style: "padding:12px" });
+  const tls = [];
+  const drawTl = () => {
+    const w = Math.max(300, tlBox.clientWidth - 24);
+    const t = timeline(v, { full: true, width: w, onSeek: s => { video.currentTime = Math.min(s, video.duration || 60); video.play(); } });
+    tls[0] = t; tlBox.replaceChildren(t.node); t.setHead(video.currentTime || 0);
+  };
+  const tick = () => { if (tls[0]) tls[0].setHead(video.currentTime); if (!video.paused) requestAnimationFrame(tick); };
+  video.addEventListener("play", tick); video.addEventListener("seeked", tick); video.addEventListener("timeupdate", tick);
+  const vb = v.vbench ? el("div", { class: "kv", style: "margin-top:8px" }, Object.entries(VBN).flatMap(([k, n]) => [el("dt", { text: "VBench " + n }), el("dd", { class: "num", text: v.vbench[k]?.toFixed(2) ?? "–" })])) : null;
+  const info = el("div", { class: "panel" },
+    el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px" }, mchip(v.arm), el("span", { class: "muted", text: M[v.arm].n })),
+    el("dl", { class: "kv" },
+      el("dt", { text: "数据集" }), el("dd", { text: DS[v.dataset].n }),
+      el("dt", { text: "prompt 编号" }), el("dd", { class: "mono", text: v.unit }),
+      el("dt", { text: "源文件" }), el("dd", { class: "mono", style: "word-break:break-all;font-size:12px", text: v.src }),
+      el("dt", { text: "prompt" }), el("dd", { text: v.prompt })),
+    vb);
+  const nav = el("div", { class: "navrow" },
+    el("a", { class: "btn", href: "#browse", text: "← 返回列表" }),
+    prev ? el("a", { class: "btn", href: "#v/" + prev.id, text: "上一个 [" }) : null,
+    next ? el("a", { class: "btn", href: "#v/" + next.id, text: "下一个 ]" }) : null,
+    el("a", { class: "btn", href: "#cmp/" + GROUP_OF[v.id], text: `同一 prompt 的全部 ${GROUPS[GROUP_OF[v.id]].vs.length} 段视频 →` }),
+    el("span", { class: "hint", text: idx >= 0 ? `列表中第 ${i + 1} / ${list.length} 个 · 空格 播放/暂停，← → 跳 2 秒` : "" }));
+  const lg = el("div", { class: "legend" }); legend(lg, true);
+  sec.replaceChildren(nav, el("div", { class: "detail-top" }, el("div", {}, video), info), el("h2", { text: "时间轴（点击跳转，悬停看画面）" }), lg, tlBox, ...detailBody(v));
+  CUR = { video, drawTl };
+  requestAnimationFrame(drawTl);
+}
+function detailBody(v) {
+  const out = [];
+  // events
+  if (v.events) {
+    const E = v.events;
+    out.push(el("h2", { text: `逐事件标注（2026-10-12 轮，单视频盲评，${E.events.length} 个事件）` }));
+    const evs = [...E.events].sort((a, b) => a.t0 - b.t0);
+    out.push(el("div", { class: "panel" },
+      el("div", { class: "note", style: "margin-bottom:6px" }, el("b", { text: "总评：" }), E.notes_zh || E.notes || "", E.notes_zh ? el("div", { class: "muted", style: "font-size:12px", text: E.notes }) : null),
+      E.seg ? el("div", { class: "note" }, el("b", { text: "每 10 秒质量分（5 = 无问题，1 = 坏掉）：" }), el("span", { class: "mono", text: E.seg.join("  ") })) : null,
+      E.benign ? el("div", { class: "note" }, el("b", { text: "正常变化（不算错误）：" }), E.benign) : null,
+      ...evs.map(e => el("div", { class: "ev" },
+        el("span", { class: "sev", style: `background:${FC[FAM[e.type] || "other"]};opacity:${[0, .55, .8, 1][e.sev || 1]}`, text: "S" + e.sev }),
+        el("div", {},
+          el("div", { class: "eh" }, el("b", { text: TN[e.type] || e.type }), el("span", { class: "mono", text: `${e.t0}–${e.t1 ?? "结束"} s` }),
+            el("span", { class: "muted", text: [e.entity_zh || e.entity, e.attribute, e.gradual ? "渐变" : "突变", e.fixed ? "后来恢复" : null, e.prompt === true ? "提示词规定了原值" : e.prompt === false ? "模型自己设定的原值" : null].filter(Boolean).join(" · ") })),
+          el("div", { class: "note" }, `${e.before_zh || e.before || ""}  →  ${e.after_zh || e.after || ""}`),
+          e.evidence ? el("div", { class: "muted", style: "font-size:12px", text: "依据：" + e.evidence }) : null)))));
+  }
+  // whole passes
+  out.push(el("h2", { text: "整段 60 秒评审（2026-10-20 轮，单视频盲评，两轮独立）" }));
+  out.push(el("div", { class: "cols2" }, v.whole.map(w => el("div", { class: "panel" },
+    el("h3", { text: `第 ${w.pass_} 轮 · 置信度 ${({ high: "高", medium: "中", low: "低" })[w.conf] || w.conf || "–"}` }),
+    el("dl", { class: "kv" },
+      el("dt", { text: "有明确主体" }), el("dd", { text: w.has_main_subject ? "是" : "否" }),
+      el("dt", { text: "主体漂移" }), el("dd", { text: isNum(w.drift_t) ? `${KIND[w.drift_kind] || w.drift_kind}，自 ${w.drift_t} s` : "无" }),
+      el("dt", { text: "画质" }), el("dd", { text: DEG[w.degrade] + (isNum(w.degrade_t) ? `，自 ${w.degrade_t} s` : "") }),
+      el("dt", { text: "冻结" }), el("dd", { text: FROZ[w.frozen] || w.frozen }),
+      el("dt", { text: "伪影" }), el("dd", { text: ART[w.artifact] || w.artifact }),
+      el("dt", { text: "运动量（0–3）" }), el("dd", { class: "num", text: w.motion }),
+      el("dt", { text: "循环 / 回弹" }), el("dd", { text: w.loop === "yes" ? "有" : "无" }),
+      el("dt", { text: "符合提示词（0–2）" }), el("dd", { class: "num", text: w.prompt })),
+    el("p", { class: "note", text: w.note || "" })))));
+  // probes
+  if (v.probe.length) {
+    out.push(el("h2", { text: "探针：30 s / 60 s 时，开头 0–2 s 的实体还在不在（单视频，两轮）" }));
+    const ents = v.inv || [];
+    const cols = v.probe.map(p => p);
+    const roleZh = { main: "主体", secondary: "次要", background: "背景" };
+    out.push(el("div", { class: "panel tablewrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "开头的实体" }), el("th", { text: "角色" }), cols.map(p => el("th", { text: `第${p.pass_}轮 @${p.t}s` })))),
+      el("tbody", {}, ents.map(e => el("tr", {}, el("td", { text: e.name }), el("td", { class: "muted", text: roleZh[e.role] || e.role }),
+        cols.map(p => { const x = p.entities.find(z => z.id === e.id); return el("td", { title: x?.note || "" }, x ? stateChip(x.end) : "–"); }))),
+        el("tr", {}, el("td", { text: "主体漂移判定" }), el("td", {}), cols.map(p => el("td", {}, el("b", { style: `color:${p.main_drift ? "var(--red)" : "var(--green)"}`, text: p.main_drift ? "漂移" : "未漂移" })))),
+        el("tr", {}, el("td", { text: "回弹到开头姿态" }), el("td", {}), cols.map(p => el("td", { class: "muted", text: ({ none: "无", partial: "部分", strong: "明显", unclear: "不确定" })[p.revert] || p.revert || "–" }))),
+        el("tr", {}, el("td", { text: "伪影" }), el("td", {}), cols.map(p => el("td", { class: "muted", text: ART[p.artifact] || p.artifact || "–" }))))),
+      el("div", { class: "hint", style: "margin-top:6px", text: "悬停单元格看评审对该实体的备注。" }),
+      ...cols.filter(p => p.note).map(p => el("p", { class: "note", style: "margin:6px 0 0" }, el("b", { text: `第${p.pass_}轮 @${p.t}s：` }), p.note))));
+  }
+  // pairwise
+  if (v.pairs.length) {
+    out.push(el("h2", { text: "成对比较（2026-10-20 轮，两个视频并排看，结果从本视频这一方读）" }));
+    out.push(el("div", { class: "panel tablewrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "比较" }), el("th", { text: "对手" }), ...Object.values(Q).map(q => el("th", { text: q })), el("th", { text: "评审备注" }))),
+      el("tbody", {}, v.pairs.map(p => el("tr", {},
+        el("td", { text: `${CMP[p.cmp] || p.cmp} · 第${p.pass_}轮（本视频在${p.side === "A" ? "左" : "右"}）` }),
+        el("td", {}, BYID[p.vs] ? el("a", { href: "#v/" + p.vs }, mchip(BYID[p.vs].arm)) : p.vs),
+        ...Object.keys(Q).map(q => el("td", {}, p.res[q] ? el("span", { class: "res " + p.res[q], text: RES[p.res[q]] || p.res[q] }) : "–")),
+        el("td", { class: "note" }, el("span", { class: "muted", text: `（本视频 = ${p.side}）` }), p.note || "")))))));
+  }
+  return out;
+}
+document.addEventListener("keydown", e => {
+  if (!$("#view-detail").classList.contains("on") || !CUR || ["INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+  const vd = CUR.video;
+  if (e.key === " ") { e.preventDefault(); vd.paused ? vd.play() : vd.pause(); }
+  else if (e.key === "ArrowRight") vd.currentTime = Math.min((vd.duration || 60), vd.currentTime + 2);
+  else if (e.key === "ArrowLeft") vd.currentTime = Math.max(0, vd.currentTime - 2);
+  else if (e.key === "]" || e.key === "[") { const a = [...document.querySelectorAll("#view-detail .navrow a")].find(x => x.textContent.includes(e.key)); if (a) a.click(); }
+});
+
+// ---------- compare ----------
+let CMPV = null;
+function compare(gi) {
+  const sec = $("#view-cmp");
+  gi = Math.max(0, Math.min(GROUPS.length - 1, isNaN(gi) ? 0 : gi));
+  const G = GROUPS[gi];
+  const sel = el("select", { "aria-label": "选择 prompt", style: "max-width:min(720px,100%)", onchange: e => { location.hash = "#cmp/" + e.target.value; } },
+    GROUPS.map((g, i) => el("option", { value: i, selected: i === gi ? "" : null, text: `${[...new Set(g.vs.map(v => DS[v.dataset].s))].join("+")} ${g.vs[0].unit.split(" · ")[0]} · ${g.vs.length} 段 · ${g.prompt.slice(0, 70)}` })));
+  const vids = [], tls = [];
+  let link = true;
+  const seekAll = (t, src) => { for (const vd of (link ? vids : [src])) { vd.currentTime = Math.min(t, vd.duration || 60); } };
+  const playAll = () => { const t = vids[0]?.currentTime || 0; vids.forEach(v => { v.currentTime = t; v.play(); }); };
+  const pauseAll = () => vids.forEach(v => v.pause());
+  const ctrl = el("div", { class: "navrow" },
+    gi > 0 ? el("a", { class: "btn", href: "#cmp/" + (gi - 1), text: "← 上一个 prompt" }) : null,
+    gi < GROUPS.length - 1 ? el("a", { class: "btn", href: "#cmp/" + (gi + 1), text: "下一个 prompt →" }) : null,
+    el("button", { class: "btn", onclick: playAll, text: "▶ 全部同步播放" }),
+    el("button", { class: "btn", onclick: pauseAll, text: "全部暂停" }),
+    el("label", { class: "hint" }, el("input", { type: "checkbox", checked: "", onchange: e => { link = e.target.checked; } }), " 点时间轴时全部联动跳转"),
+    el("label", { class: "hint" }, "速度 ", el("select", { onchange: e => vids.forEach(v => v.playbackRate = +e.target.value) }, [1, 1.5, 2, 3].map(r => el("option", { value: r, text: r + "×" })))));
+  const grid = el("div", { class: "cmpgrid" });
+  const cards = G.vs.map(v => {
+    const vd = el("video", { src: `v/${v.id}.mp4`, controls: "", preload: "metadata", playsinline: "", muted: "" }); vd.muted = true;
+    vids.push(vd);
+    const box = el("div");
+    const c = el("div", { class: "cmpcard" },
+      el("div", { class: "hd" }, mchip(v.arm), el("span", { class: "mono muted", text: `${DS[v.dataset].s} ${v.unit}` }), el("a", { href: "#v/" + v.id, style: "margin-left:auto", text: "详情 →" })),
+      vd, box, el("div", { class: "badges" }, badges(v)));
+    const draw = () => { const t = timeline(v, { full: true, width: Math.max(280, box.clientWidth), strip: false, onSeek: s => { seekAll(s, vd); } }); tls[vids.indexOf(vd)] = t; box.replaceChildren(t.node); };
+    const tick = () => { const t = tls[vids.indexOf(vd)]; if (t) t.setHead(vd.currentTime); if (!vd.paused) requestAnimationFrame(tick); };
+    vd.addEventListener("play", tick); vd.addEventListener("timeupdate", tick); vd.addEventListener("seeked", tick);
+    c._draw = draw; return c;
+  });
+  grid.append(...cards);
+  const lg = el("div", { class: "legend" }); legend(lg, true);
+  sec.replaceChildren(el("div", { class: "filters" }, el("label", {}, "prompt", sel)), el("p", { class: "prose", text: G.prompt }), ctrl, lg, grid,
+    el("p", { class: "hint", text: "同一 prompt 下，MG128 的视频每个种子各一段（R / AB10 一定都有，ABs10 只有 60 个单元）；MGX100 是 seed 5000+编号。不同数据集的种子不同，画面不可直接逐帧对比。" }));
+  CMPV = { draw: () => cards.forEach(c => c._draw()) };
+  requestAnimationFrame(CMPV.draw);
+}
+
+// ---------- summary ----------
+function summary() {
+  const sec = $("#view-sum");
+  if (sec.dataset.done) return;
+  sec.dataset.done = 1;
+  const rows = ARMS.map(a => {
+    const vs = D.filter(v => v.arm === a), W = vs.flatMap(v => v.whole), P = vs.flatMap(v => v.probe);
+    const share = f => W.filter(f).length / W.length;
+    const vb = k => mean(vs.map(v => v.vbench?.[k]).filter(isNum));
+    return { a, ds: vs[0].dataset, n: vs.length, drift: share(w => isNum(w.drift_t)), onset: median(W.map(w => w.drift_t).filter(isNum)),
+      deg: share(w => w.degrade !== "stable"), col: share(w => w.degrade === "collapse"), froz: share(w => w.frozen !== "none"), loop: share(w => w.loop === "yes"),
+      major: share(w => w.artifact === "major"), motion: mean(W.map(w => w.motion).filter(isNum)), prompt: mean(W.map(w => w.prompt).filter(isNum)),
+      probe: P.length ? P.filter(p => p.main_drift).length / P.length : NaN, vb: Object.fromEntries(Object.keys(VBN).map(k => [k, vb(k)])) };
+  });
+  const tbl = el("div", { class: "panel tablewrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, ["方法", "数据集", "视频数", "主体漂移", "漂移起点中位数", "画质衰退", "崩坏", "冻结", "循环/回弹", "严重伪影", "运动 0–3", "提示词 0–2", "探针主体漂移"].map((h, i) => el("th", { class: i > 1 ? "num" : null, text: h })))),
+    el("tbody", {}, rows.map(r => el("tr", {}, el("td", {}, mchip(r.a)), el("td", { class: "mono muted", text: DS[r.ds].s }), el("td", { class: "num", text: r.n }),
+      ...[pct(r.drift), isNaN(r.onset) ? "–" : r.onset + " s", pct(r.deg), pct(r.col), pct(r.froz), pct(r.loop), pct(r.major), r.motion.toFixed(2), r.prompt.toFixed(2), isNaN(r.probe) ? "–" : pct(r.probe)]
+        .map(t => el("td", { class: "num", text: t })))))));
+  const vbt = el("div", { class: "panel tablewrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "方法" }), el("th", { text: "数据集" }), ...Object.values(VBN).map(n => el("th", { class: "num", text: n })))),
+    el("tbody", {}, rows.map(r => el("tr", {}, el("td", {}, mchip(r.a)), el("td", { class: "mono muted", text: DS[r.ds].s }), ...Object.keys(VBN).map(k => el("td", { class: "num", text: r.vb[k].toFixed(2) })))))));
+  // event-round breakdown
+  const evArms = ARMS.filter(a => D.some(v => v.arm === a && v.events));
+  const evt = el("div", { class: "panel tablewrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "方法" }), el("th", { class: "num", text: "有逐事件标注的视频" }), ...Object.keys(FN).map(f => el("th", { class: "num" }, el("span", { class: "bd", style: "border:0;padding:0" }, el("i", { style: `background:${FC[f]}` })), " ", FN[f], " ≥S2")), el("th", { class: "num", text: "任一 S3" }))),
+    el("tbody", {}, evArms.map(a => { const vs = D.filter(v => v.arm === a && v.events);
+      return el("tr", {}, el("td", {}, mchip(a)), el("td", { class: "num", text: vs.length }),
+        ...Object.keys(FN).map(f => el("td", { class: "num", text: pct(vs.filter(v => v.events.events.some(e => FAM[e.type] === f && e.sev >= 2)).length / vs.length) })),
+        el("td", { class: "num", text: pct(vs.filter(v => v.any.s3).length / vs.length) })); }))));
+  const charts = el("div", { class: "cols2" }, Object.keys(DS).map(ds => survival(ds)));
+  sec.replaceChildren(
+    el("h2", { text: "主体在多长时间内保持不变（整段评审，两轮合并）" }),
+    el("p", { class: "prose", text: "纵轴：到这一秒为止还没被标出主体漂移的视频比例（每段视频的两轮评审各算一次）。两个数据集的 prompt 不同，只在同一张图内比较。ABs10 只有 60 个单元，是 MG128 的子集。" }),
+    charts,
+    el("h2", { text: "整段评审各项比例（每段视频两轮各算一次）" }), tbl,
+    el("p", { class: "hint", text: "严格的配对差值和置信区间见仓库 reports/video/VLM20_LABELS_ZH_2026-10-20.md。跨数据集不要直接比。LL·R 和 LongLive 是同一套权重，但推理代码和 prompt 集都不同，不能合并。" }),
+    el("h2", { text: "逐事件标注：出现至少一个严重度 ≥2 事件的视频比例（2026-10-12 轮）" }), evt,
+    el("p", { class: "hint", text: "Self-Forcing 两个版本只有前 50 个 prompt 做了逐事件标注；LL·R / AB10 / ABs10 还没有做这一轮。" }),
+    el("h2", { text: "VBench-Long（5 个不依赖 LAION 的维度，每段视频平均）" }), vbt,
+    el("p", { class: "hint", text: "VBench 对这里关心的主体漂移基本不敏感（主体一致性在各方法间只差零点几），只作参考。" }));
+}
+function survival(ds) {
+  const arms = ARMS.filter(a => D.some(v => v.arm === a && v.dataset === ds));
+  const W = 600, H = 260, L = 40, R = 180, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
+  const x = t => L + t / 60 * pw, y = p => T + (1 - p) * ph;
+  const series = arms.map(a => {
+    const ws = D.filter(v => v.arm === a && v.dataset === ds).flatMap(v => v.whole);
+    const pts = []; for (let t = 0; t <= 60; t++) pts.push(ws.filter(w => !(isNum(w.drift_t) && w.drift_t <= t)).length / ws.length);
+    return { a, pts, n: ws.length };
+  });
+  const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": `${DS[ds].s}：主体未漂移比例随时间变化` });
+  for (const p of [0, .25, .5, .75, 1]) {
+    svg.append(sv("line", { x1: L, x2: L + pw, y1: y(p), y2: y(p), stroke: "var(--rule2)" }));
+    svg.append(sv("text", { x: L - 6, y: y(p) + 4, "text-anchor": "end" }, pct(p)));
+  }
+  for (let t = 0; t <= 60; t += 10) svg.append(sv("text", { x: x(t), y: H - 8, "text-anchor": "middle" }, t + "s"));
+  svg.append(sv("line", { x1: L, x2: L + pw, y1: y(0), y2: y(0), stroke: "var(--muted)" }));
+  // end labels, nudged apart
+  const ends = series.map(s => ({ s, yy: y(s.pts[60]) })).sort((a, b) => a.yy - b.yy);
+  for (let i = 1; i < ends.length; i++) if (ends[i].yy - ends[i - 1].yy < 14) ends[i].yy = ends[i - 1].yy + 14;
+  for (const s of series) {
+    let d = `M${x(0)},${y(s.pts[0])}`;
+    for (let t = 1; t <= 60; t++) d += `H${x(t)}V${y(s.pts[t])}`;
+    svg.append(sv("path", { d, fill: "none", stroke: M[s.a].c, "stroke-width": 2, "stroke-linejoin": "round" }));
+  }
+  for (const e of ends) svg.append(sv("text", { class: "lab", x: x(60) + 6, y: e.yy + 4 }, `${M[e.s.a].s} ${pct(e.s.pts[60])}`));
+  const hair = sv("line", { y1: T, y2: T + ph, stroke: "var(--muted)", "stroke-dasharray": "2 2", opacity: 0 });
+  const dots = series.map(s => sv("circle", { r: 4, fill: M[s.a].c, stroke: "var(--surface)", "stroke-width": 2, opacity: 0 }));
+  svg.append(hair, ...dots);
+  const hit = sv("rect", { x: L, y: T, width: pw, height: ph, fill: "transparent" });
+  hit.addEventListener("pointermove", evt => {
+    const r = svg.getBoundingClientRect(), t = Math.max(0, Math.min(60, Math.round(((evt.clientX - r.left) * W / r.width - L) / pw * 60)));
+    hair.setAttribute("x1", x(t)); hair.setAttribute("x2", x(t)); hair.setAttribute("opacity", 1);
+    series.forEach((s, i) => { dots[i].setAttribute("cx", x(t)); dots[i].setAttribute("cy", y(s.pts[t])); dots[i].setAttribute("opacity", 1); });
+    showTip(evt, () => [el("div", { class: "t", text: `${t} s` }), ...series.map(s => el("div", {}, el("span", { style: `display:inline-block;width:12px;height:2px;background:${M[s.a].c};vertical-align:middle;margin-right:6px` }),
+      el("b", { class: "num", text: pct(s.pts[t]) }), " ", el("span", { class: "muted", text: `${M[s.a].s}（${s.n} 次评审）` })))]);
+  });
+  hit.addEventListener("pointerleave", () => { hair.setAttribute("opacity", 0); dots.forEach(d => d.setAttribute("opacity", 0)); hideTip(); });
+  svg.append(hit);
+  const leg = el("div", { class: "legend" }, series.map(s => el("span", { class: "k" }, el("span", { class: "bar", style: `background:${M[s.a].c};height:2px` }), M[s.a].n)));
+  return el("div", { class: "panel chart" }, el("h3", { text: DS[ds].n }), leg, svg);
+}
+
+// ---------- about ----------
+function about() {
+  const sec = $("#view-about");
+  if (sec.dataset.done) return; sec.dataset.done = 1;
+  const p = (...k) => el("p", {}, ...k);
+  sec.replaceChildren(el("div", { class: "prose", style: "padding-top:14px" },
+    el("h2", { text: "这里有什么" }),
+    p(`共 ${D.length} 段 60 秒视频，来自 7 个方法、2 个 prompt 集。每段都有 VLM（Claude 子代理）的盲评标注：评审只看到帧图（每 2 秒一张总览 + 每秒一帧），不知道是哪个方法，也看不到视频播放。`),
+    el("ul", {}, Object.entries(M).map(([a, m]) => el("li", {}, mchip(a), " ", m.n, el("span", { class: "muted", text: ` — ${D.filter(v => v.arm === a).length} 段` })))),
+    p(el("strong", { text: "还没有的方法：" }), "Causal Forcing（清华朱军组）、LongLive-2.0-5B 还没有生成 60 秒视频，所以不在这里。"),
+    el("h2", { text: "四类标注" }),
+    p(el("strong", { text: "逐事件（2026-10-12）：" }), "单视频，一轮。每个问题记下类型、严重度 1–3、起止秒和前后描述。覆盖 LongLive / LongLive+OPSD-V 全部 100 个 prompt，Self-Forcing 两版各 50 个。时间轴最上面一行就是它，颜色按问题类型：红 = 主体（身份、属性、物体凭空出现/消失），蓝 = 场景/背景，橙 = 画质/结构，紫 = 循环/停滞，灰 = 偏离提示词/其他。"),
+    p(el("strong", { text: "整段 60 秒（2026-10-20）：" }), "单视频，两轮独立盲评（盲 id、批次组合都不同；同一批里不会出现同一 prompt 的两个视频）。记主体漂移的起点与类型、画质衰退的起点、冻结、伪影、运动量、循环、提示词符合度。时间轴中间两行：红色上半条从漂移起点画到结尾，橙色下半条从画质衰退起点画到结尾，紫色斜纹表示冻结。两轮在“是否漂移”上一致率 0.86–0.94。"),
+    p(el("strong", { text: "探针（2026-10-20）：" }), "单视频。先只看 0–2 秒列出实体（主体/次要/背景），再在 30 s 和 60 s 判断每个实体是不变、改变、被替换、消失，还是正常出画/被遮挡。主体被改变、替换或消失即算漂移。绿点 = 未漂移，红点 = 漂移。"),
+    p(el("strong", { text: "成对比较（2026-10-20）：" }), "两个视频并排给评审看，回答身份、运动、画质、提示词、总体哪边更好；两轮左右互换。只覆盖同一 prompt + 种子的配对。"),
+    el("h2", { text: "怎么读" }),
+    p("VLM 在“身份是否保持”上和人工评审的一致率是 0.87（46 对人工样本，双方都选了一边时），在“画质”上与人工不一致，所以画质类标注只作线索。时间轴上的起点精度大约是 1–2 秒。"),
+    p("每段视频网页上放的是压缩版（416×240，16 fps），原始文件是 832×480；评审用的是原始分辨率的帧。"),
+    p("原始标注（带方法 id、视频路径、评审原话）在 PerceptualDistill 仓库 labels/vlm/ 下；本站数据在 data.json。")));
+}
+
+// ---------- router ----------
+function route() {
+  const h = location.hash.slice(1) || "browse";
+  const [v, arg] = h.split("/");
+  const view = { browse: "browse", v: "detail", cmp: "cmp", sum: "sum", about: "about" }[v] || "browse";
+  document.querySelectorAll("section.view").forEach(s => s.classList.toggle("on", s.id === "view-" + view));
+  document.querySelectorAll("nav.tabs a").forEach(a => a.classList.toggle("on", a.dataset.v === (view === "detail" ? "browse" : view)));
+  document.querySelectorAll("video").forEach(x => { if (!x.closest("section.view.on")) x.pause(); });
+  hideTip();
+  if (view === "detail") { detail(decodeURIComponent(arg || "")); scrollTo(0, 0); }
+  else if (view === "cmp") { compare(parseInt(arg ?? "0", 10)); scrollTo(0, 0); }
+  else if (view === "sum") summary();
+  else if (view === "about") about();
+}
+let RT; addEventListener("resize", () => { clearTimeout(RT); RT = setTimeout(() => {
+  if ($("#view-detail").classList.contains("on") && CUR) CUR.drawTl();
+  if ($("#view-cmp").classList.contains("on") && CMPV) CMPV.draw(); }, 150); });
+addEventListener("hashchange", route);
+
+// ---------- theme ----------
+(() => {
+  const b = $("#theme"), names = { auto: "自动", light: "亮", dark: "暗" }, order = ["auto", "light", "dark"];
+  let m = "auto"; try { m = localStorage.getItem("lhg-theme") || "auto"; } catch (e) {}
+  const apply = () => { if (m === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", m); b.textContent = "明暗：" + names[m]; };
+  b.addEventListener("click", () => { m = order[(order.indexOf(m) + 1) % 3]; try { localStorage.setItem("lhg-theme", m); } catch (e) {} apply(); });
+  apply();
+})();
+
+fetch("data.json").then(r => r.json()).then(d => {
+  D = d.videos; D.forEach(derive); D.forEach(v => BYID[v.id] = v); buildGroups();
+  buildFilters(); legend($("#legend1"), false); refresh(); route();
+}).catch(e => { document.querySelector(".wrap").prepend(el("div", { class: "empty", text: "data.json 加载失败：" + e })); });
+</script>
+</body>
+</html>
